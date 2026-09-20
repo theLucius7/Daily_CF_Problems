@@ -97,7 +97,8 @@ function renderMetrics() {
   const messages = [];
   if (progress.error) messages.push('最近同步未成功，正在保留上次进度。');
   else if (stale) messages.push('当前显示历史快照，可点击「同步进度」核对最新提交。');
-  if (catalog.error || Date.now() - Date.parse(catalog.updatedAt) > 172800000) messages.push('题单快照较旧，需要运行项目的数据更新命令刷新题单。');
+  if (catalog.error) messages.push('题单同步暂不可用，正在显示上次成功获取的题单。');
+  else if (Date.now() - Date.parse(catalog.updatedAt) > 172800000) messages.push('当前题单为历史快照，最新题目可能尚未收录。');
   if (!storageAvailable) messages.push('本地记录不可用，请检查浏览器存储设置。');
   $('#data-warning').hidden = !messages.length;
   $('#data-warning').textContent = messages.join(' ');

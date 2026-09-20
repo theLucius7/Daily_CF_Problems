@@ -26,6 +26,8 @@ jobs:
           python-version: '3.12'
       - run: npm ci
       - name: Refresh public problem and submission snapshots
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: npm run sync -- --allow-stale
       - run: npm test
       - run: npm run build

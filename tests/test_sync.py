@@ -1,7 +1,9 @@
 import json
+import io
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
@@ -17,6 +19,14 @@ def submission(sid, verdict='OK', members=None, team_id=None, at=None):
 
 
 class SyncTest(unittest.TestCase):
+    def test_github_auth_is_never_sent_to_codeforces(self):
+        with patch.dict('os.environ', {'GITHUB_TOKEN': 'test-workflow-token'}):
+            with patch('sync.urllib.request.urlopen', side_effect=lambda *args, **kwargs: io.StringIO('{}')) as request:
+                sync.json_request('https://api.github.com/repos/Yawn-Sean/Daily_CF_Problems/commits/main')
+                self.assertEqual(request.call_args.args[0].get_header('Authorization'), 'Bearer test-workflow-token')
+                sync.json_request('https://codeforces.com/api/user.status?handle=Lucius7')
+                self.assertIsNone(request.call_args.args[0].get_header('Authorization'))
+
     def test_markdown_keeps_absolute_value_pipes_and_escaped_pipes(self):
         rows = list(sync.table_rows('| *1700 | [GYM103426B](https://codeforces.com/gym/103426/problem/B) | Try $|x|$ and \\|y\\|. | [Editorial](https://example.com) |'))
         self.assertEqual(len(rows), 1)

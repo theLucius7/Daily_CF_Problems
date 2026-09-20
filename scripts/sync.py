@@ -7,12 +7,14 @@ import argparse
 import datetime as dt
 import io
 import json
+import os
 import re
 import subprocess
 import sys
 import tarfile
 import time
 import urllib.request
+from urllib.parse import urlparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -143,7 +145,12 @@ def make_catalog(files, revision, dirty=False):
 
 
 def json_request(url):
-    request = urllib.request.Request(url, headers={"User-Agent": "Lucius7-calendar", "Accept": "application/json"})
+    headers = {"User-Agent": "Lucius7-calendar", "Accept": "application/json"}
+    # Hosted runners share anonymous API quotas. Keep the workflow credential
+    # restricted to GitHub's API; never send it to Codeforces or archive hosts.
+    if urlparse(url).hostname == "api.github.com" and os.environ.get("GITHUB_TOKEN"):
+        headers["Authorization"] = f"Bearer {os.environ['GITHUB_TOKEN']}"
+    request = urllib.request.Request(url, headers=headers)
     last_error = None
     for attempt in range(3):
         try:
