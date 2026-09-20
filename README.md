@@ -2,6 +2,8 @@
 
 为 Lucius7 制作的 Daily_CF_Problems 刷题日历。查看每日题单、个人完成情况、题目难度、折叠提示、题解以及个人代码。
 
+在线访问：[Lucius7 刷题日历](https://thelucius7.github.io/Daily_CF_Problems/)
+
 这是 `codex/lucius7-calendar` **孤立分支（orphan branch）**，从新的根提交开始，与 `main` / 上游没有共同提交历史。它只读取原仓库的公开题单作为数据，不向上游提交日历代码。原工作区的 `main` 保持不变。
 
 ## 使用
@@ -58,9 +60,17 @@ npm run preview
 
 测试覆盖团队 / 个人 AC、UTC+8 日期、重复推荐、闰年与跨年月份、组合筛选、备份验证、Markdown 中的绝对值符号、分页、缺失题解、同步失败保留快照。
 
-构建产物在 `dist/`，使用相对资源路径，可部署到域名根路径或 GitHub Pages 子路径。该分支的 Actions 仅检查、构建并上传构建包，不修改主分支，也不自动发布网站。
+构建产物在 `dist/`，使用相对资源路径，部署到 GitHub Pages 的 `/Daily_CF_Problems/` 子路径。
 
-若以后发布，可单独配置静态托管使用此分支与 `npm run build` / `dist`。不要直接沿用上游的强制覆盖 `gh-pages` 工作流。[GitHub 的定时工作流只在默认分支运行](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)，此独立非默认分支没有添加无法生效的定时触发器。
+### GitHub Pages 部署
+
+向 `codex/lucius7-calendar` 推送提交会触发 `Deploy practice calendar`：读取最新公开题单与提交，运行测试，构建并通过官方 Pages Actions 发布 `dist/`。外部接口不可用时使用仓库中保留的快照，并在页面显示数据状态。构建和测试失败时不会发布。
+
+仓库 Settings → Pages 的 Source 使用 **GitHub Actions**；`github-pages` 环境只允许 `codex/lucius7-calendar` 分支部署。发布流程不改动 `main`，不依赖或强制覆盖上游的 `gh-pages` 分支。
+
+如需重新发布同一提交，可在 Actions 页面重新运行最近一次部署。浏览器“同步进度”仍可随时读取最新公开提交；手动记录按网站来源分别保存在浏览器，本地预览的手动记录可通过导出 / 导入迁移到线上。
+
+[GitHub 的定时工作流只在默认分支运行](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)，此独立非默认分支没有添加无法生效的定时触发器。题单在每次部署时刷新。
 
 ## 目录
 

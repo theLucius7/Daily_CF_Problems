@@ -1,4 +1,4 @@
-name: Calendar checks
+name: Deploy practice calendar
 
 on:
   push:
@@ -7,9 +7,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: calendar-pages
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,10 +25,26 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci
+      - name: Refresh public problem and submission snapshots
+        run: npm run sync -- --allow-stale
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
         with:
-          name: lucius7-calendar
           path: dist/
-          retention-days: 14
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
