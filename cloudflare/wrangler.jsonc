@@ -1,0 +1,14 @@
+{
+  "name": "daily-cf-problems-proxy",
+  "main": "proxy.js",
+  "compatibility_date": "2026-09-20",
+  "account_id": "382b1f1823ef6c31404f27bf535161a4",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "daily-cf-problems.lucius7.dev",
+      "custom_domain": true
+    }
+  ]
+}
