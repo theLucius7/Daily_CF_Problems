@@ -1,0 +1,15 @@
+{
+  "name": "lucius7-practice-calendar",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4319 --strictPort",
+    "build": "vite build --base=./",
+    "preview": "vite preview --host 127.0.0.1 --port 4319 --strictPort",
+    "sync": "python3 scripts/sync.py",
+    "test": "node --test tests/*.test.js && python3 -m unittest discover -s tests -p 'test_*.py'"
+  },
+  "dependencies": { "katex": "^0.16.22" },
+  "devDependencies": { "vite": "^7.1.0" }
+}
