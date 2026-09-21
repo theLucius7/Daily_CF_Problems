@@ -2,6 +2,7 @@ import './style.css';
 import 'katex/dist/katex.min.css';
 import katex from 'katex';
 import { icon } from './icons.js';
+import { CATALOG_STORAGE, validCatalog, newerCatalog, catalogCheckedToday, refreshCatalog } from './catalog.js';
 import { TIMEZONE, STATUS, dayKey, completion, isComplete, filterTasks, monthCells, shiftMonth, stats, acceptanceDays, activityRange, validateMarks } from './model.js';
 
 const $ = (selector) => document.querySelector(selector);
@@ -11,7 +12,7 @@ const link = (url, text, className = '') => `<a class="${className}" href="${saf
 const prettyDate = date => new Intl.DateTimeFormat('zh-CN', { timeZone: TIMEZONE, month: 'long', day: 'numeric', weekday: 'long' }).format(new Date(`${date}T12:00:00+08:00`));
 const timeText = date => date ? new Intl.DateTimeFormat('zh-CN', { timeZone: TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(date)) : '尚未同步';
 const STORAGE = 'lucius7-calendar:marks:v1';
-const today = dayKey();
+let today = dayKey();
 let catalog, progress, marks = {}, storageAvailable = true, busy = false;
 const state = { month: today.slice(0, 7), selected: today, view: 'calendar', mode: 'plan', query: '', status: 'all', difficulty: 'all', category: 'all', limit: 40 };
 const categoryNames = { DP: '动态规划', greedy: '贪心', graph: '图论', probabilities: '概率', counting: '计数', games: '博弈', random: '随机化', shortest_path: '最短路', binary_search: '二分', matrix: '矩阵', sortings: '排序', number_theory: '数论', constructive: '构造', trees: '树', strings: '字符串', brain_teaser: '思维', two_pointers: '双指针', data_structures: '数据结构', geometry: '几何', brute_force: '枚举', bitmask: '位运算' };
@@ -53,7 +54,7 @@ function shell() {
       <div class="workspace-label">我的工作台</div>
       <nav aria-label="主导航">
         <button data-view="calendar" class="nav-item active" aria-label="刷题日历">${icon('calendar')}<span>刷题日历</span></button>
-        <button data-view="all" class="nav-item" aria-label="全部题目">${icon('grid')}<span>全部题目</span><span class="nav-count">${stats(catalog.tasks, progress, marks).total}</span></button>
+        <button data-view="all" class="nav-item" aria-label="全部题目">${icon('grid')}<span>全部题目</span><span id="all-count" class="nav-count">${stats(catalog.tasks, progress, marks).total}</span></button>
         <button data-view="todo" class="nav-item" aria-label="待完成">${icon('flag')}<span>待完成</span><span id="todo-count" class="nav-count"></span></button>
         <button data-view="done" class="nav-item" aria-label="已完成">${icon('check')}<span>已完成</span></button>
       </nav>
@@ -65,7 +66,7 @@ function shell() {
       </div>
     </aside>
     <main>
-      <header class="topbar"><div class="breadcrumb">我的工作台<span>/</span><strong id="breadcrumb-view">刷题日历</strong></div><div class="top-actions"><span class="timezone">UTC+8</span><span class="live-pill" id="snapshot-status"></span><button id="refresh" class="button small">${icon('refresh')}<span>同步进度</span></button></div></header>
+      <header class="topbar"><div class="breadcrumb">我的工作台<span>/</span><strong id="breadcrumb-view">刷题日历</strong></div><div class="top-actions"><span class="timezone">UTC+8</span><span class="live-pill" id="snapshot-status"></span><button id="refresh" class="button small">${icon('refresh')}<span>同步题单与进度</span></button></div></header>
       <section class="page-heading"><div><div class="eyebrow">LUCIUS7’S PRACTICE JOURNAL</div><h1 id="page-title">把每一次思考，记在日历上<span>。</span></h1><p id="page-subtitle">从一道题开始，看见自己的积累。</p></div><div class="today-label">${icon('calendar')}<div><strong>${today.replaceAll('-', ' / ')}</strong><span>${new Intl.DateTimeFormat('zh-CN', { timeZone: TIMEZONE, weekday: 'long' }).format(new Date())}</span></div></div></section>
       <div id="data-warning" class="data-warning" hidden></div>
       <section id="metrics" class="metrics" aria-label="刷题统计"></section>
@@ -90,15 +91,17 @@ function renderMetrics() {
     [icon('calendar'), `${Number(state.month.slice(5))} 月题单进度`, `${monthly.percent}<small>%</small>`, `${monthly.done} / ${monthly.total} 题已完成`, 'purple'],
   ].map(([symbol, label, number, sub, tone]) => `<article class="metric"><div class="metric-label">${label}<span class="metric-icon ${tone}">${symbol}</span></div><div class="metric-value">${number}</div><div class="metric-sub">${sub}</div>${tone === 'purple' ? `<div class="progress-track"><span style="width:${monthly.percent}%"></span></div>` : ''}</article>`).join('');
   $('#todo-count').textContent = all.todo;
+  $('#all-count').textContent = all.total;
   const stale = progress.error || !progress.updatedAt || Date.now() - Date.parse(progress.updatedAt) > 86400000;
-  $('#snapshot-status').innerHTML = `<span class="status-dot"></span>${stale ? '历史快照' : '进度已同步'}`;
-  $('#snapshot-status').classList.toggle('stale', Boolean(stale));
-  $('#snapshot-status').title = `最近成功同步：${timeText(progress.updatedAt)}`;
+  const catalogStale = !catalogCheckedToday(catalog, today);
+  $('#snapshot-status').innerHTML = `<span class="status-dot"></span>${catalogStale ? '题单待同步' : stale ? '进度待同步' : '已同步'}`;
+  $('#snapshot-status').classList.toggle('stale', Boolean(stale || catalogStale));
+  $('#snapshot-status').title = `题单：${timeText(catalog.updatedAt)}；提交：${timeText(progress.updatedAt)}`;
   const messages = [];
   if (progress.error) messages.push('最近同步未成功，正在保留上次进度。');
-  else if (stale) messages.push('当前显示历史快照，可点击「同步进度」核对最新提交。');
+  else if (stale) messages.push('当前进度为历史快照，可点击「同步题单与进度」核对最新提交。');
   if (catalog.error) messages.push('题单同步暂不可用，正在显示上次成功获取的题单。');
-  else if (Date.now() - Date.parse(catalog.updatedAt) > 172800000) messages.push('当前题单为历史快照，最新题目可能尚未收录。');
+  else if (catalogStale) messages.push('尚未核对今天的题单，可点击「同步题单与进度」更新。');
   if (!storageAvailable) messages.push('本地记录不可用，请检查浏览器存储设置。');
   $('#data-warning').hidden = !messages.length;
   $('#data-warning').textContent = messages.join(' ');
@@ -120,6 +123,8 @@ function render() {
   $('#breadcrumb-view').textContent = titles[state.view];
   $('#status-filter').value = state.status;
   $('#difficulty-filter').value = state.difficulty;
+  $('#category-filter').value = state.category;
+  $('#category-filter').innerHTML = '<option value="all">全部专题</option>' + [...new Set(catalog.tasks.flatMap(task => task.categories))].sort().map(category => `<option value="${escape(category)}">${escape(categoryNames[category] || category)}</option>`).join('');
   $('#category-filter').value = state.category;
   const tasks = visibleTasks();
   if (state.view === 'calendar') renderCalendar(tasks); else renderList(tasks);
@@ -149,7 +154,7 @@ function renderCalendar(tasks) {
   $('#prev-month').onclick = () => changeMonth(shiftMonth(state.month, -1));
   $('#next-month').onclick = () => changeMonth(shiftMonth(state.month, 1));
   $('#month-picker').onchange = event => changeMonth(event.target.value);
-  $('#go-today').onclick = () => { state.month = today.slice(0, 7); state.selected = today; render(); };
+  $('#go-today').onclick = () => { updateToday(); state.month = today.slice(0, 7); state.selected = today; render(); };
   document.querySelectorAll('[data-date]').forEach(button => button.onclick = () => { state.selected = button.dataset.date; state.month = state.selected.slice(0, 7); render(); });
   document.querySelectorAll('[data-mode]').forEach(button => button.onclick = () => { state.mode = button.dataset.mode; render(); });
   bindProblemActions();
@@ -165,7 +170,7 @@ function changeMonth(month) {
 function renderDetail(groups) {
   const tasks = groups.get(state.selected) || [];
   const total = (groupDays(catalog.tasks).get(state.selected) || []).length;
-  $('#day-detail').innerHTML = `<div class="detail-header"><div class="eyebrow">${state.mode === 'plan' ? 'DAILY PRACTICE' : 'FIRST ACCEPTED'}</div><h2>${prettyDate(state.selected)}</h2><p>${tasks.length ? `${tasks.length} 道题 · ${tasks.filter(task => isComplete(completion(task, progress, marks))).length} 道已完成` : '留一点时间，给下一次思考'}</p></div><div class="detail-body">${tasks.length ? tasks.map(task => problemCard(task)).join('') : `<div class="empty-state"><span class="empty-illustration">${icon(state.mode === 'ac' ? 'check' : 'book')}</span><h3>${total ? '没有符合筛选的题目' : state.mode === 'ac' ? '这一天没有首次 AC' : state.selected > today ? '题单尚未发布' : '今天没有新题单'}</h3><p>${total ? '试试调整筛选条件。' : state.mode === 'ac' ? '这里只显示题单内的个人 AC 记录。' : '可以翻翻之前的题目，继续上一次的思考。'}</p><button class="button" id="open-backlog">查看待完成 ${icon('arrow')}</button></div>`}</div><div class="detail-tip">${icon('bulb')}<span>先想一想，再展开提示。</span></div>`;
+  $('#day-detail').innerHTML = `<div class="detail-header"><div class="eyebrow">${state.mode === 'plan' ? 'DAILY PRACTICE' : 'FIRST ACCEPTED'}</div><h2>${prettyDate(state.selected)}</h2><p>${tasks.length ? `${tasks.length} 道题 · ${tasks.filter(task => isComplete(completion(task, progress, marks))).length} 道已完成` : '留一点时间，给下一次思考'}</p></div><div class="detail-body">${tasks.length ? tasks.map(task => problemCard(task)).join('') : `<div class="empty-state"><span class="empty-illustration">${icon(state.mode === 'ac' ? 'check' : 'book')}</span><h3>${total ? '没有符合筛选的题目' : state.mode === 'ac' ? '这一天没有首次 AC' : state.selected > today ? '题单尚未发布' : catalogCheckedToday(catalog, today) ? '上游暂未发布这天的题单' : '这天的题单尚未同步'}</h3><p>${total ? '试试调整筛选条件。' : state.mode === 'ac' ? '这里只显示题单内的个人 AC 记录。' : '可以翻翻之前的题目，继续上一次的思考。'}</p><button class="button" id="open-backlog">查看待完成 ${icon('arrow')}</button></div>`}</div><div class="detail-tip">${icon('bulb')}<span>先想一想，再展开提示。</span></div>`;
   if ($('#open-backlog')) $('#open-backlog').onclick = () => switchView('todo');
 }
 
@@ -228,7 +233,7 @@ function bindShell() {
   $('#search').oninput = event => { state.query = event.target.value; state.limit = 40; if (state.query && state.view === 'calendar') state.view = 'all'; render(); };
   for (const key of ['status', 'difficulty', 'category']) $(`#${key}-filter`).onchange = event => { state[key] = event.target.value; state.limit = 40; if (key === 'status' && state.view !== 'calendar') state.view = 'all'; render(); };
   $('#clear-filters').onclick = resetFilters;
-  $('#refresh').onclick = syncProgress;
+  $('#refresh').onclick = () => syncData();
   $('#about-button').onclick = openAbout;
   $('#close-about').onclick = () => $('#about-dialog').close();
   $('#about-dialog').onclick = event => { if (event.target === $('#about-dialog')) { const rect = event.target.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.target.close(); } };
@@ -239,45 +244,90 @@ function bindShell() {
 let toastTimer;
 function toast(message) { clearTimeout(toastTimer); $('#toast').textContent = message; $('#toast').classList.add('show'); toastTimer = setTimeout(() => $('#toast').classList.remove('show'), 4500); }
 
-async function syncProgress() {
-  if (busy) return;
-  busy = true; $('#refresh').disabled = true; $('#refresh').classList.add('syncing'); $('#refresh span').textContent = '正在同步';
+async function fetchProgress() {
   const entries = new Map();
+  for (let from = 1; ; from += 10000) {
+    const response = await fetch(`https://codeforces.com/api/user.status?handle=Lucius7&from=${from}&count=10000`, { signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const body = await response.json();
+    if (body.status !== 'OK' || !Array.isArray(body.result)) throw new Error(body.comment || '数据格式异常');
+    body.result.forEach(row => entries.set(row.id, row));
+    if (body.result.length < 10000) break;
+    await new Promise(resolve => setTimeout(resolve, 2200));
+  }
+  const problems = {};
+  for (const row of [...entries.values()].sort((a, b) => a.creationTimeSeconds - b.creationTimeSeconds || a.id - b.id)) {
+    const { problem, author } = row;
+    if (!problem?.contestId || !author?.members?.some(member => member.handle.toLowerCase() === 'lucius7')) continue;
+    const id = `cf:${problem.contestId}:${problem.index.toUpperCase()}`;
+    const entry = problems[id] ||= { name: problem.name, attempts: 0, soloAttempts: 0, firstAccepted: null, teamAccepted: null };
+    const team = Boolean(author.teamId) || author.members.length !== 1;
+    entry.attempts++; if (!team) entry.soloAttempts++;
+    const evidence = { id: row.id, at: row.creationTimeSeconds, verdict: row.verdict || 'TESTING', url: `https://codeforces.com/${problem.contestId >= 100000 ? 'gym' : 'contest'}/${problem.contestId}/submission/${row.id}` };
+    entry.latest = evidence;
+    if (row.verdict === 'OK') entry[team ? 'teamAccepted' : 'firstAccepted'] ||= evidence;
+  }
+  return { ...progress, problems, submissionCount: entries.size, publicHistoryComplete: true, error: null, updatedAt: new Date().toISOString(), lastAttemptAt: new Date().toISOString() };
+}
+
+async function fetchCatalog() {
+  let baseline = catalog;
   try {
-    for (let from = 1; ; from += 10000) {
-      const response = await fetch(`https://codeforces.com/api/user.status?handle=Lucius7&from=${from}&count=10000`, { signal: AbortSignal.timeout(30000) });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const body = await response.json();
-      if (body.status !== 'OK' || !Array.isArray(body.result)) throw new Error(body.comment || '数据格式异常');
-      body.result.forEach(row => entries.set(row.id, row));
-      if (body.result.length < 10000) break;
-      await new Promise(resolve => setTimeout(resolve, 2200));
+    const response = await fetch(`${import.meta.env.BASE_URL}data/calendar.json`, { cache: 'no-cache', signal: AbortSignal.timeout(10000) });
+    if (response.ok) baseline = newerCatalog(baseline, await response.json());
+  } catch { /* The current catalog can still be refreshed directly from upstream. */ }
+  return refreshCatalog(baseline, { today });
+}
+
+function updateToday() {
+  const next = dayKey();
+  if (next === today) return false;
+  if (state.selected === today) { state.selected = next; state.month = next.slice(0, 7); }
+  today = next;
+  $('.today-label strong').textContent = today.replaceAll('-', ' / ');
+  $('.today-label div span').textContent = new Intl.DateTimeFormat('zh-CN', { timeZone: TIMEZONE, weekday: 'long' }).format(new Date());
+  return true;
+}
+
+async function syncData({ catalogOnly = false, quiet = false } = {}) {
+  if (busy) return;
+  updateToday();
+  const syncDay = today;
+  busy = true; $('#refresh').disabled = true; $('#refresh').classList.add('syncing'); $('#refresh span').textContent = '正在同步';
+  try {
+    const oldKeys = new Set(catalog.tasks.map(task => task.key));
+    const results = await Promise.allSettled([fetchCatalog(), ...(catalogOnly ? [] : [fetchProgress()])]);
+    const messages = [];
+    if (results[0].status === 'fulfilled') {
+      catalog = results[0].value;
+      readMarks();
+      try { localStorage.setItem(CATALOG_STORAGE, JSON.stringify(catalog)); } catch { /* Keep the in-memory catalog. */ }
+      const added = catalog.tasks.filter(task => !oldKeys.has(task.key)).length;
+      messages.push(added ? `新增 ${added} 条题目推荐` : '题单已核对');
+      if (!catalog.tasks.some(task => task.date === today)) messages.push('上游暂未发布今日题单');
+    } else {
+      catalog = { ...catalog, error: String(results[0].reason.message) };
+      messages.push('题单同步失败，已保留原题单');
     }
-    const problems = {};
-    for (const row of [...entries.values()].sort((a, b) => a.creationTimeSeconds - b.creationTimeSeconds || a.id - b.id)) {
-      const { problem, author } = row;
-      if (!problem?.contestId || !author?.members?.some(member => member.handle.toLowerCase() === 'lucius7')) continue;
-      const id = `cf:${problem.contestId}:${problem.index.toUpperCase()}`;
-      const entry = problems[id] ||= { name: problem.name, attempts: 0, soloAttempts: 0, firstAccepted: null, teamAccepted: null };
-      const team = Boolean(author.teamId) || author.members.length !== 1;
-      entry.attempts++; if (!team) entry.soloAttempts++;
-      const evidence = { id: row.id, at: row.creationTimeSeconds, verdict: row.verdict || 'TESTING', url: `https://codeforces.com/${problem.contestId >= 100000 ? 'gym' : 'contest'}/${problem.contestId}/submission/${row.id}` };
-      entry.latest = evidence;
-      if (row.verdict === 'OK') entry[team ? 'teamAccepted' : 'firstAccepted'] ||= evidence;
+    if (results[1]?.status === 'fulfilled') {
+      progress = results[1].value;
+      try { localStorage.setItem('lucius7-calendar:progress:v1', JSON.stringify(progress)); } catch { /* Keep the in-memory progress. */ }
+      messages.push(`已核对 ${progress.submissionCount.toLocaleString()} 条公开提交`);
+    } else if (results[1]?.status === 'rejected') {
+      progress = { ...progress, error: String(results[1].reason.message), lastAttemptAt: new Date().toISOString() };
+      messages.push('进度同步失败，已保留原进度');
     }
-    progress = { ...progress, problems, submissionCount: entries.size, publicHistoryComplete: true, error: null, updatedAt: new Date().toISOString(), lastAttemptAt: new Date().toISOString() };
-    try { localStorage.setItem('lucius7-calendar:progress:v1', JSON.stringify(progress)); } catch { /* The in-memory result remains useful. */ }
-    render(); toast(`已核对 ${entries.size.toLocaleString()} 条公开提交，进度已更新。`);
-  } catch (error) {
-    progress = { ...progress, error: String(error.message), lastAttemptAt: new Date().toISOString() };
-    renderMetrics(); toast('同步暂不可用，已保留原有进度。稍后可重试。');
+    render();
+    if (!quiet || results.some(result => result.status === 'rejected')) toast(messages.join('；') + '。');
   } finally {
-    busy = false; $('#refresh').disabled = false; $('#refresh').classList.remove('syncing'); $('#refresh span').textContent = '同步进度';
+    busy = false; $('#refresh').disabled = false; $('#refresh').classList.remove('syncing'); $('#refresh span').textContent = '同步题单与进度';
+    updateToday();
+    if (today !== syncDay) void syncData({ catalogOnly: true, quiet: true });
   }
 }
 
 function openAbout() {
-  $('#about-content').innerHTML = `<p>这里记录的是 <strong>Daily_CF_Problems 题单内</strong>的做题情况。</p><dl class="source-list"><dt>题单快照</dt><dd>${timeText(catalog.updatedAt)} · ${catalog.tasks.length} 条推荐</dd><dt>提交快照</dt><dd>${timeText(progress.updatedAt)} · ${progress.submissionCount} 条公开提交</dd><dt>题单版本</dt><dd>${link(`https://github.com/${catalog.source.repository}/commit/${catalog.source.revision}`, catalog.source.revision.slice(0, 10))}</dd></dl><h3>怎样判断完成？</h3><p><strong>已完成</strong>：查到 Lucius7 的单人 AC，或你主动手动标记。团队 AC、有代码、尝试中均单独显示，不自动计入个人完成。</p><p><strong>未见 AC</strong>：公开提交里尚未找到个人通过记录，不代表私有比赛或其他账号一定没做过。接口不可用且没有历史快照时显示“状态未知”。</p><p>月历默认按<strong>题单发布日期</strong>排列，也可切换到首次个人 AC 日期。所有日期采用 Asia/Taipei（UTC+8）。难度前的 <strong>≈</strong> 保留题单原有的 <strong>*</strong> 标记，表示估计难度。</p><p>提示与题解来自原题单，默认折叠提示；专题标签也放在提示中，以免提前透露解法。</p><h3>更新与本地记录</h3><p>「同步进度」直接查询 Codeforces，仅刷新当前浏览器的个人提交。题单由项目的数据脚本更新，当前收录至 <strong>${catalog.tasks.at(-1).date}</strong>。</p><p>手动完成保存在此浏览器，清理浏览器数据后会丢失。可导出备份，在其他设备导入；导入会合并记录。</p><div class="backup-actions"><button id="export-marks" class="button">${icon('download')}导出手动记录</button><button id="import-marks" class="button">${icon('upload')}导入记录</button></div><p class="source-links">${link('https://codeforces.com/apiHelp/methods#user.status', 'Codeforces API 说明')}${link('https://github.com/Yawn-Sean/Daily_CF_Problems', '原始题单')}</p>`;
+  $('#about-content').innerHTML = `<p>这里记录的是 <strong>Daily_CF_Problems 题单内</strong>的做题情况。</p><dl class="source-list"><dt>题单快照</dt><dd>${timeText(catalog.updatedAt)} · ${catalog.tasks.length} 条推荐</dd><dt>提交快照</dt><dd>${timeText(progress.updatedAt)} · ${progress.submissionCount} 条公开提交</dd><dt>完整题单版本</dt><dd>${link(`https://github.com/${catalog.source.repository}/commit/${catalog.source.revision}`, catalog.source.revision.slice(0, 10))}</dd>${catalog.source.liveRevision ? `<dt>近期题单版本</dt><dd>${link(`https://github.com/${catalog.source.repository}/commit/${catalog.source.liveRevision}`, catalog.source.liveRevision.slice(0, 10))} · ${catalog.source.liveFrom} — ${catalog.source.liveThrough}</dd>` : ''}</dl><h3>怎样判断完成？</h3><p><strong>已完成</strong>：查到 Lucius7 的单人 AC，或你主动手动标记。团队 AC、有代码、尝试中均单独显示，不自动计入个人完成。</p><p><strong>未见 AC</strong>：公开提交里尚未找到个人通过记录，不代表私有比赛或其他账号一定没做过。接口不可用且没有历史快照时显示“状态未知”。</p><p>月历默认按<strong>题单发布日期</strong>排列，也可切换到首次个人 AC 日期。所有日期采用 Asia/Taipei（UTC+8）。难度前的 <strong>≈</strong> 保留题单原有的 <strong>*</strong> 标记，表示估计难度。</p><p>提示与题解来自原题单，默认折叠提示；专题标签也放在提示中，以免提前透露解法。</p><h3>更新与本地记录</h3><p>「同步题单与进度」同时读取上游新题与 Codeforces 公开提交，并缓存到当前浏览器。打开页面时，若题单跨天或缺少今日题目，会自动核对，最近一周的提示和题解也会重新检查；历史专题和代码索引随部署完整更新。当前收录至 <strong>${catalog.tasks.at(-1).date}</strong>。</p><p>手动完成保存在此浏览器，清理浏览器数据后会丢失。可导出备份，在其他设备导入；导入会合并记录。</p><div class="backup-actions"><button id="export-marks" class="button">${icon('download')}导出手动记录</button><button id="import-marks" class="button">${icon('upload')}导入记录</button></div><p class="source-links">${link('https://codeforces.com/apiHelp/methods#user.status', 'Codeforces API 说明')}${link('https://github.com/Yawn-Sean/Daily_CF_Problems', '原始题单')}</p>`;
   $('#export-marks').onclick = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify({ version: 1, handle: 'Lucius7', marks }, null, 2)], { type: 'application/json' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = `Lucius7-calendar-${today}.json`; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -300,13 +350,18 @@ async function start() {
   try {
     const responses = await Promise.all(['calendar', 'progress'].map(name => fetch(`${import.meta.env.BASE_URL}data/${name}.json`, { cache: 'no-cache' }).then(response => { if (!response.ok) throw new Error(`${name} ${response.status}`); return response.json(); })));
     [catalog, progress] = responses;
-    if (!Array.isArray(catalog.tasks) || !progress.problems || progress.handle !== 'Lucius7') throw new Error('数据格式异常');
+    if (!validCatalog(catalog) || !progress.problems || progress.handle !== 'Lucius7') throw new Error('数据格式异常');
     try {
+      catalog = newerCatalog(catalog, JSON.parse(localStorage.getItem(CATALOG_STORAGE) || 'null'));
       const cached = JSON.parse(localStorage.getItem('lucius7-calendar:progress:v1') || 'null');
       if (cached?.schemaVersion === 1 && cached.handle === 'Lucius7' && cached.problems && Date.parse(cached.updatedAt) > Date.parse(progress.updatedAt || 0)) progress = cached;
     } catch { /* Use the bundled snapshot when storage is unavailable. */ }
-    if (!catalog.tasks.some(task => task.date === today)) state.selected = catalog.tasks.filter(task => task.date <= today && task.date.startsWith(state.month)).at(-1)?.date || today;
     readMarks(); shell(); render();
+    if (!catalogCheckedToday(catalog, today) || !catalog.tasks.some(task => task.date === today)) void syncData({ catalogOnly: true, quiet: true });
+    const checkDay = () => { if (!document.hidden && updateToday()) { render(); void syncData({ catalogOnly: true, quiet: true }); } };
+    window.addEventListener('focus', checkDay);
+    document.addEventListener('visibilitychange', checkDay);
+    setInterval(checkDay, 60000);
   } catch (error) {
     $('#app').innerHTML = `<div class="boot-error">${icon('book')}<h1>日历暂时没有打开</h1><p>数据加载失败，请检查连接后重试。</p><button class="button" id="retry">重新加载</button><details><summary>错误详情</summary>${escape(error.message)}</details></div>`;
     $('#retry').onclick = () => location.reload();

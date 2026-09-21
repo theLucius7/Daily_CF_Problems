@@ -48,7 +48,9 @@ npm run sync -- --source /Users/l7/programs/Daily_CF_Problems
 npm run sync -- --allow-stale
 ```
 
-刷新失败会保留上次成功时间和进度，附上错误状态；页面显式显示快照是否过期。浏览器“同步进度”只更新个人提交并在本地缓存，不更新题单；浏览器 CORS / 网络限制会显示失败并保留现有数据。
+刷新失败会保留上次成功时间和进度，附上错误状态；页面显式显示快照是否过期。浏览器“同步题单与进度”会并行核对上游题单和个人公开提交，并分别缓存成功结果；一项失败不妨碍另一项更新，页面会明确指出失败项。题单刷新补齐上次收录日期至今天的全部日期，并重新核对最近一周的题目、提示和已存在的题解，所有新链接固定到同一上游提交。历史专题和个人代码索引由部署时的完整快照更新。浏览器 CORS / 网络限制或 GitHub 公共 API 限流会显示失败并保留现有数据。
+
+打开页面时，题单已跨天或尚无今日题目会自动核对上游；保持页面打开跨过 UTC+8 午夜时也会更新日期和题单。上游尚未发布与网络同步失败分别提示，默认选中今天。手动同步无需重新部署网站。
 
 本项目不依赖账号凭据，不包含私有提交源代码或私人学习笔记。API 仅用于读取公开记录；手动记录不上传。
 
@@ -60,7 +62,7 @@ npm run build
 npm run preview
 ```
 
-测试覆盖团队 / 个人 AC、UTC+8 日期、重复推荐、闰年与跨年月份、组合筛选、备份验证、Markdown 中的绝对值符号、分页、缺失题解、同步失败保留快照。
+测试覆盖团队 / 个人 AC、UTC+8 日期、重复推荐、闰年与跨年月份、组合筛选、备份验证、Markdown 中的绝对值符号、分页、缺失题解、同步失败保留快照、浏览器跨天补题、同日提示更新、未发布与请求失败的区别。
 
 构建产物在 `dist/`，使用相对资源路径，部署到 GitHub Pages 的 `/Daily_CF_Problems/` 子路径。
 
@@ -70,9 +72,9 @@ npm run preview
 
 仓库 Settings → Pages 的 Source 使用 **GitHub Actions**；`github-pages` 环境只允许 `codex/lucius7-calendar` 分支部署。发布流程不改动 `main`，不依赖或强制覆盖上游的 `gh-pages` 分支。
 
-如需重新发布同一提交，可在 Actions 页面重新运行最近一次部署。浏览器“同步进度”仍可随时读取最新公开提交；手动记录按网站来源分别保存在浏览器，本地预览的手动记录可通过导出 / 导入迁移到线上。
+如需重新发布同一提交，可在 Actions 页面重新运行最近一次部署。浏览器“同步题单与进度”可随时读取新题和最新公开提交；手动记录按网站来源分别保存在浏览器，本地预览的手动记录可通过导出 / 导入迁移到线上。
 
-[GitHub 的定时工作流只在默认分支运行](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)，此独立非默认分支没有添加无法生效的定时触发器。题单在每次部署时刷新。
+[GitHub 的定时工作流只在默认分支运行](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)，此独立非默认分支没有添加无法生效的定时触发器。完整题单在每次部署时刷新，浏览器另行直接同步每日新题。
 
 ### Cloudflare 反向代理
 
